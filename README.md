@@ -9,7 +9,7 @@
 ```
 test-user@test-vm:~/python_redfish_api$ uv run cisco-ucscimc-redfish.py 
 
-Script started at 16:18:05 on 09-22-2025
+Script started at 20:18:05 on 09-21-2025
 
 Retrieving data for 2 devices...
 
@@ -35,6 +35,6 @@ Output is exported to '192.168.1.11.txt'
 
 Completed.
 
-Script ended at 16:18:08 on 09-22-2025
+Script ended at 20:18:08 on 09-21-2025
 Total script runtime: 00:00:03
 ```
