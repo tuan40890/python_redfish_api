@@ -1,4 +1,4 @@
-# Display PDU Info
+# Display Server Info
 - This python script interacts with the Redfish API to obtain and display data from the Cisco UCS Rack Servers
 - It also uses the cryptography library to encrypt the password that the user enters
 - First, run `key_gen.py` to enter credentials to generate the encrypted files `key.key` and `creds.enc`
