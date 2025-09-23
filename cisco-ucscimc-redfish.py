@@ -9,6 +9,9 @@ from cryptography.fernet import Fernet
 import requests
 from requests.auth import HTTPBasicAuth
 
+# disable SSL certificate verification warnings
+requests.packages.urllib3.disable_warnings()
+
 
 def load_creds():
     '''
@@ -41,45 +44,63 @@ def info_retrieval(ip, user, password):
     # set an empty list to append sectional outputs after
     display_output = []
 
-    # disable SSL certificate verification warnings
-    requests.packages.urllib3.disable_warnings()
-
     # set up base API URL for the target IP
     base_url = f"https://{ip}/redfish/v1"
 
+    # ---------------------Retrieve info from the /Systems/ resource---------------------
     # send a GET request with credentials, disable SSL verification, return response in .json format 
-    systems = requests.get(f"{base_url}/Systems", auth=HTTPBasicAuth(user, password), verify=False).json()
+    systems = requests.get(f"{base_url}/Systems/", auth=HTTPBasicAuth(user, password), verify=False).json()
     
-    # from the response above, extract the list of system members
-    members = systems.get("Members", [])
+    # from the Members array under Systems, extract the first "@odata.id" value (serial number)
+    serial_number = systems.get("Members", [])[0]["@odata.id"].split("/")[-1]
 
-    # extract the first member's '@odata.id' URI (serial number)
-    serial_number = members[0]["@odata.id"].split("/")[-1]
+    # assign a variable to the extracted string value
+    serial_number_resource = requests.get(f"{base_url}/Systems/{serial_number}", auth=HTTPBasicAuth(user, password), verify=False).json()
 
-    # send a GET request again with the serial number
-    each_system = requests.get(f"{base_url}/Systems/{serial_number}", auth=HTTPBasicAuth(user, password), verify=False).json()
+    # obtain individual item
+    model = serial_number_resource.get("Model")
+    sn = serial_number_resource.get("SerialNumber")
+    fw = serial_number_resource.get("BiosVersion")
+    total_memory = serial_number_resource.get("MemorySummary", {}).get("TotalSystemMemoryGiB")
+    memory_health = serial_number_resource.get("MemorySummary", {}).get("Status").get("Health")
+    effective_memory = serial_number_resource.get("Oem", {}).get("Cisco", {}).get("SystemEffectiveMemory")
     
-    # start obtaining info
-    model = each_system.get("Model")
-    sn = each_system.get("SerialNumber")
-    fw = each_system.get("BiosVersion")
-    cpu = each_system.get("ProcessorSummary", {})
-    total_memory = each_system.get("MemorySummary", {}).get("TotalSystemMemoryGiB")
-    memory_health = each_system.get("MemorySummary", {}).get("Status").get("Health")
-    effective_memory = each_system.get("Oem", {}).get("Cisco", {}).get("SystemEffectiveMemory")
-    
-    display_output.append("[DEVICE INFO]")
+    display_output.append("----------[DEVICE INFO]----------\n")
     display_output.append(f"Model: {model}")
     display_output.append(f"Serial Number: {sn}")
     display_output.append(f"CIMC FW Version: {fw}")
-    display_output.append("CPU Model: " + str(cpu.get("Count")) + " x " + cpu.get("Model"))
     display_output.append(f"Total Memory in GB: {total_memory} (Health = {memory_health})")
     display_output.append(f"Effective Memory in GB: {effective_memory}")
 
+    # ---------------------Retrieve info from the /Systems/{serial_number}/Processors/ resource---------------------
+    cpu1 = requests.get(f"{base_url}/Systems/{serial_number}/Processors/CPU1/", auth=HTTPBasicAuth(user, password), verify=False).json()
+    cpu1_state = cpu1.get("Status", {}).get("State", {})
+    cpu1_model = cpu1.get("Model", {})
+    cpu1_des = cpu1.get("Description", {})
+    cpu2 = requests.get(f"{base_url}/Systems/{serial_number}/Processors/CPU2/", auth=HTTPBasicAuth(user, password), verify=False).json()
+    cpu2_state = cpu2.get("Status", {}).get("State", {})
+    cpu2_model = cpu2.get("Model", {})
+    cpu2_des = cpu2.get("Description", {})
+    display_output.append("\n----------[CPU INFO]----------")
+    display_output.append(f"CPU1\n\tPresence: {cpu1_state}\n\tModel: {cpu1_model}\n\tDescription: {cpu1_des}")
+    display_output.append(f"CPU2\n\tPresence: {cpu2_state}\n\tModel: {cpu2_model}\n\tDescription: {cpu2_des}")
+
+    # ---------------------Retrieve info from the /Chassis/1/Power/ resource---------------------
+    psu = requests.get(f"{base_url}/Chassis/1/Power/", auth=HTTPBasicAuth(user, password), verify=False).json()
+    psu1_state = psu["PowerSupplies"][0]["Status"]["State"]
+    psu1_model = psu["PowerSupplies"][0]["Model"]
+    psu2_state = psu["PowerSupplies"][1]["Status"]["State"]
+    psu2_model = psu["PowerSupplies"][0]["Model"]
+    display_output.append("\n----------[PSU INFO]----------")
+    display_output.append(f"PSU1\n\tPresence: {psu1_state}\n\tModel: {psu1_model}")
+    display_output.append(f"PSU2\n\tPresence: {psu2_state}\n\tModel: {psu2_model}")
+
+    # join all the output and name the output file
     output_file_name = f"{ip}.txt"
-    display_output.append(f"Output is exported to '{output_file_name}'")
+    display_output.append(f"\nOutput is exported to '{output_file_name}'")
     display_output.append(f"------------------------------------------\n")
     joining_output = "\n".join(display_output)
+    
 
     try:
 
