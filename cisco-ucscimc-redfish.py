@@ -113,20 +113,24 @@ def info_retrieval(ip, user, password):
     psu1_state = psu["PowerSupplies"][0]["Status"]["State"]
     psu1_health = psu["PowerSupplies"][0]["Status"]["Health"]
     psu1_model = psu["PowerSupplies"][0]["Model"]
+    psu1_sn = psu["PowerSupplies"][0]["SerialNumber"]
     psu2_name = psu["PowerSupplies"][1]["Name"]
     psu2_state = psu["PowerSupplies"][1]["Status"]["State"]
     psu2_health = psu["PowerSupplies"][1]["Status"]["Health"]
     psu2_model = psu["PowerSupplies"][1]["Model"]
+    psu2_sn = psu["PowerSupplies"][0]["SerialNumber"]
     display_output.append(
         f"{psu1_name}\n\t"
         f"Presence: {psu1_state}\n\t"
         f"Health: {psu1_health}\n\t"
-        f"Model: {psu1_model}")
+        f"Model: {psu1_model}\n\t"
+        f"Serial Number: {psu1_sn}")
     display_output.append(
         f"{psu2_name}\n\t"
         f"Presence: {psu2_state}\n\t"
         f"Health: {psu2_health}\n\t"
-        f"Model: {psu2_model}")
+        f"Model: {psu2_model}\n\t"
+        f"Serial Number: {psu2_sn}")
 
     # ---------------------Retrieve info from the /Systems/{serial_number}/Memory/ resource---------------------
     display_output.append("\n----------[MEMORY INFO]----------")
@@ -138,16 +142,7 @@ def info_retrieval(ip, user, password):
         create a mapping of vendor ID of the manufacturer from hex to string, source:
         https://www.cisco.com/c/en/us/td/docs/unified_computing/ucs/c/sw/gui/config/guide/2-0/b_Cisco_UCS_C-Series_GUI_Configuration_Guide_for_C3x60_Servers/b_Cisco_UCS_C-Series_GUI_Configuration_Guide_207_chapter_0101.pdf
     '''
-    vendor_id_mapping = {
-        "0x2C00" : "Micron Technology, Inc.",
-        "0x5105" : "Qimonda AG i. In.",
-        "0x802C" : "Micron Technology, Inc.",
-        "0x80AD" : "Hynix Semiconductor Inc.",
-        "0x80CE" : "Samsung Electronics, Inc.",
-        "0x8551" : "Qimonda AG i. In.",
-        "0xAD00" : "Hynix Semiconductor Inc.",
-        "0xCE00" : "Samsung Electronics, Inc."
-    }
+
 
     all_dimms = memory.get("Members", [])
     all_dimm_data = []
@@ -158,7 +153,22 @@ def info_retrieval(ip, user, password):
             auth=HTTPBasicAuth(user, password), verify=False
         ).json()
         dimm_slot_name = retrieve_dim_info.get("Name", {})
+        
+        # manufacturer returns a hex string, create a dict to convert it to the normal name
+        vendor_id_mapping = {
+            "0x2C00" : "Micron Technology, Inc.",
+            "0x5105" : "Qimonda AG i. In.",
+            "0x802C" : "Micron Technology, Inc.",
+            "0x80AD" : "Hynix Semiconductor Inc.",
+            "0x80CE" : "Samsung Electronics, Inc.",
+            "0x8551" : "Qimonda AG i. In.",
+            "0xAD00" : "Hynix Semiconductor Inc.",
+            "0xCE00" : "Samsung Electronics, Inc."
+        }
         dimm_manu = retrieve_dim_info.get("Manufacturer", "")
+        if dimm_manu:
+            dimm_manu = vendor_id_mapping.get(dimm_manu, {})
+        
         dimm_part_num = retrieve_dim_info.get("PartNumber", "")
         dimm_sn = retrieve_dim_info.get("SerialNumber", "")
         dimm_type = retrieve_dim_info.get("MemoryDeviceType", "")
