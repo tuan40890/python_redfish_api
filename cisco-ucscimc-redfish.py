@@ -80,7 +80,6 @@ def info_retrieval(ip, user, password):
         auth=HTTPBasicAuth(user, password), verify=False).json()
     cpu1_name = cpu1.get("Name", {})
     cpu1_state = cpu1.get("Status", {}).get("State", {})
-    cpu1_health = cpu1.get("Status", {}).get("Health", {})
     cpu1_model = cpu1.get("Model", {})
     cpu1_des = cpu1.get("Description", {})
     cpu2 = requests.get(
@@ -88,19 +87,16 @@ def info_retrieval(ip, user, password):
         auth=HTTPBasicAuth(user, password), verify=False).json()
     cpu2_name = cpu2.get("Name", {})
     cpu2_state = cpu2.get("Status", {}).get("State", {})
-    cpu2_health = cpu1.get("Status", {}).get("Health", {})
     cpu2_model = cpu2.get("Model", {})
     cpu2_des = cpu2.get("Description", {})
     display_output.append(
         f"{cpu1_name}\n\t"
         f"Presence: {cpu1_state}\n\t"
-        f"Health: {cpu1_health}\n\t"
         f"Model: {cpu1_model}\n\t"
         f"Description: {cpu1_des}")
     display_output.append(
         f"{cpu2_name}\n\t"
         f"Presence: {cpu2_state}\n\t"
-        f"Health: {cpu2_health}\n\t"
         f"Model: {cpu2_model}\n\t"
         f"Description: {cpu2_des}")
 
@@ -111,39 +107,69 @@ def info_retrieval(ip, user, password):
         auth=HTTPBasicAuth(user, password), verify=False).json()
     psu1_name = psu["PowerSupplies"][0]["Name"]
     psu1_state = psu["PowerSupplies"][0]["Status"]["State"]
-    psu1_health = psu["PowerSupplies"][0]["Status"]["Health"]
     psu1_model = psu["PowerSupplies"][0]["Model"]
     psu1_sn = psu["PowerSupplies"][0]["SerialNumber"]
     psu2_name = psu["PowerSupplies"][1]["Name"]
     psu2_state = psu["PowerSupplies"][1]["Status"]["State"]
-    psu2_health = psu["PowerSupplies"][1]["Status"]["Health"]
     psu2_model = psu["PowerSupplies"][1]["Model"]
     psu2_sn = psu["PowerSupplies"][0]["SerialNumber"]
     display_output.append(
         f"{psu1_name}\n\t"
         f"Presence: {psu1_state}\n\t"
-        f"Health: {psu1_health}\n\t"
         f"Model: {psu1_model}\n\t"
         f"Serial Number: {psu1_sn}")
     display_output.append(
         f"{psu2_name}\n\t"
         f"Presence: {psu2_state}\n\t"
-        f"Health: {psu2_health}\n\t"
         f"Model: {psu2_model}\n\t"
         f"Serial Number: {psu2_sn}")
+    
+    # ---------------------Retrieve info from the /Systems/{serial_number}/Storage/MRAID1/ resource---------------------
+    display_output.append("\n----------[DRIVE INFO]----------")
+    drive = requests.get(
+        f"{base_url}/Systems/{serial_number}/Storage/MRAID1/",
+        auth=HTTPBasicAuth(user, password), verify=False).json()
+    all_drives = drive.get("Drives", [])
+    all_drive_data = []
+    for each_drive in all_drives:
+        drive_slot = each_drive["@odata.id"].split("/")[-1]
+        retrieve_drive_info = requests.get(
+            f"{base_url}/Systems/{serial_number}/Storage/MRAID1/Drives/{drive_slot}",
+            auth=HTTPBasicAuth(user, password), verify=False
+        ).json()
+        drive_slot_name = retrieve_drive_info.get("PhysicalLocation", {}).get("PartLocation", {}).get("ServiceLabel", "")
+        drive_manu = retrieve_drive_info.get("Manufacturer", "")
+        drive_model = retrieve_drive_info.get("Model", "")
+        drive_name = retrieve_drive_info.get("Name", "")
+        drive_sn = retrieve_drive_info.get("SerialNumber", "")
+        drive_type = retrieve_drive_info.get("MediaType", "")
+        drive_size = retrieve_drive_info.get("CapacityBytes", "")
+        if drive_size:
+            drive_size_gb = round(drive_size / (1024 * 1024 * 1024))
+        drive_state = retrieve_drive_info.get("Status", {}).get("State", "")
+        each_drive_data = [
+            drive_slot_name,
+            drive_manu,
+            drive_model,
+            drive_name,
+            drive_sn,
+            drive_type,
+            drive_size_gb,
+            drive_state
+        ]
+        all_drive_data.append(each_drive_data)
+    drive_headers = ["Slot #", "Manufacturer", "Model", "Name", "Serial #", "Type", "Capacity(GB)", "Presence"]
+    if all_drive_data:
+        drive_df = pd.DataFrame(all_drive_data, columns=drive_headers).to_string(index=False, justify="left")
+        display_output.append(drive_df)
+    else:
+        display_output.append("No drives found or populated.")
 
     # ---------------------Retrieve info from the /Systems/{serial_number}/Memory/ resource---------------------
     display_output.append("\n----------[MEMORY INFO]----------")
     memory = requests.get(
         f"{base_url}/Systems/{serial_number}/Memory/",
         auth=HTTPBasicAuth(user, password), verify=False).json()
-
-    '''
-        create a mapping of vendor ID of the manufacturer from hex to string, source:
-        https://www.cisco.com/c/en/us/td/docs/unified_computing/ucs/c/sw/gui/config/guide/2-0/b_Cisco_UCS_C-Series_GUI_Configuration_Guide_for_C3x60_Servers/b_Cisco_UCS_C-Series_GUI_Configuration_Guide_207_chapter_0101.pdf
-    '''
-
-
     all_dimms = memory.get("Members", [])
     all_dimm_data = []
     for each_dimm in all_dimms:
@@ -153,8 +179,12 @@ def info_retrieval(ip, user, password):
             auth=HTTPBasicAuth(user, password), verify=False
         ).json()
         dimm_slot_name = retrieve_dim_info.get("Name", {})
-        
-        # manufacturer returns a hex string, create a dict to convert it to the normal name
+
+        '''
+        manufacturer returns a hex string, create a dict to convert it to the normal name, source:
+        https://www.cisco.com/c/en/us/td/docs/unified_computing/ucs/c/sw/gui/config/guide/2-0/b_Cisco_UCS_C-Series_GUI_Configuration_Guide_for_C3x60_Servers/b_Cisco_UCS_C-Series_GUI_Configuration_Guide_207_chapter_0101.pdf
+        '''
+
         vendor_id_mapping = {
             "0x2C00" : "Micron Technology, Inc.",
             "0x5105" : "Qimonda AG i. In.",
@@ -174,8 +204,7 @@ def info_retrieval(ip, user, password):
         dimm_type = retrieve_dim_info.get("MemoryDeviceType", "")
         dimm_capacity = retrieve_dim_info.get("CapacityMiB", "")
         dimm_speed = retrieve_dim_info.get("OperatingSpeedMhz", "")
-        dimm_slot_state = retrieve_dim_info.get("Status", {}).get("State", "")
-        dimm_slot_health = retrieve_dim_info.get("Status", {}).get("Health", "")
+        dimm_state = retrieve_dim_info.get("Status", {}).get("State", "")
         each_dimm_data = [
             dimm_slot_name,
             dimm_manu,
@@ -184,16 +213,15 @@ def info_retrieval(ip, user, password):
             dimm_type,
             dimm_capacity,
             dimm_speed,
-            dimm_slot_state,
-            dimm_slot_health
+            dimm_state
         ]
         all_dimm_data.append(each_dimm_data)
 
     # store output in a table format
-    headers = ["Slot Name", "Manufacturer", "Part Number", "Serial Number", "Type", "Size(MB)", "Speed(MHz)", "Presence", "Health"]
+    mem_headers = ["Slot Name", "Manufacturer", "Part #", "Serial #", "Type", "Size(MB)", "Speed(MHz)", "Presence"]
     if all_dimm_data:
-        df = pd.DataFrame(all_dimm_data, columns=headers).to_string(index=False, justify="left")
-        display_output.append(df)
+        mem_df = pd.DataFrame(all_dimm_data, columns=mem_headers).to_string(index=False, justify="left")
+        display_output.append(mem_df)
     else:
         display_output.append("No memory DIMMs found or populated.")
 
