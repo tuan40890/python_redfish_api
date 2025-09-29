@@ -125,6 +125,7 @@ def info_retrieval(ip, user, password):
         f"Serial Number: {psu2_sn}")
     
     # ---------------------Retrieve info from the /Systems/{serial_number}/Storage/MRAID1/ resource---------------------
+    # ---------------------Modify resource MRAID0, or MRAID1, or another MRAID number to get drive info---------------------
     display_output.append("\n----------[DRIVE INFO]----------")
     drive = requests.get(
         f"{base_url}/Systems/{serial_number}/Storage/MRAID1/",
